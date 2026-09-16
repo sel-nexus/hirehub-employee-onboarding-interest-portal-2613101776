@@ -4,6 +4,8 @@ dist/
 build/
 coverage/
 .vite/
+test-results/
+playwright-report/
 
 # Local environment files
 .env
