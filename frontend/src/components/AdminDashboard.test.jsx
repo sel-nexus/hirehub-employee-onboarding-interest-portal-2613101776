@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminDashboard from './AdminDashboard.jsx';
 
@@ -10,11 +11,19 @@ const seeded = [
 
 function seedSubmissions(records = seeded) { localStorage.setItem('hirehub_submissions', JSON.stringify(records)); }
 
+function renderDashboard(onLogout = vi.fn()) {
+  return render(
+    <MemoryRouter>
+      <AdminDashboard onLogout={onLogout} />
+    </MemoryRouter>,
+  );
+}
+
 describe('AdminDashboard', () => {
   beforeEach(() => { seedSubmissions(); vi.spyOn(window, 'confirm').mockReturnValue(true); });
 
   it('renders derived total, department, latest-date statistics and table data', () => {
-    render(<AdminDashboard onLogout={vi.fn()} />);
+    renderDashboard();
     expect(screen.getByText('Total Submissions')).toBeVisible();
     expect(screen.getByText('Total Submissions').closest('article')).toHaveTextContent('2');
     expect(screen.getByText('Departments')).toBeVisible();
@@ -25,14 +34,14 @@ describe('AdminDashboard', () => {
 
   it('shows an empty-state when no local records exist', () => {
     localStorage.clear();
-    render(<AdminDashboard onLogout={vi.fn()} />);
+    renderDashboard();
     expect(screen.getByText('No submissions yet.')).toBeVisible();
     expect(screen.getByText('N/A')).toBeVisible();
   });
 
   it('edits permitted values while retaining the email unique key', async () => {
     const user = userEvent.setup();
-    render(<AdminDashboard onLogout={vi.fn()} />);
+    renderDashboard();
     await user.click(screen.getAllByRole('button', { name: 'Edit' })[0]);
     expect(screen.getByRole('dialog', { name: 'Edit Submission' })).toBeVisible();
     expect(screen.getByLabelText('Email')).toBeDisabled();
@@ -46,18 +55,29 @@ describe('AdminDashboard', () => {
 
   it('requires confirmation then removes only the selected submission', async () => {
     const user = userEvent.setup();
-    render(<AdminDashboard onLogout={vi.fn()} />);
+    renderDashboard();
     await user.click(screen.getAllByRole('button', { name: 'Delete' })[1]);
     expect(window.confirm).toHaveBeenCalledWith('Are you sure you want to delete this submission?');
     expect(screen.queryByText('Morgan Reed')).not.toBeInTheDocument();
     expect(screen.getByText('Avery Stone')).toBeVisible();
   });
 
+  it('keeps the visible row and persisted records unchanged when deletion is declined', async () => {
+    const user = userEvent.setup();
+    vi.mocked(window.confirm).mockReturnValueOnce(false);
+    renderDashboard();
+
+    await user.click(screen.getAllByRole('button', { name: 'Delete' })[1]);
+
+    expect(screen.getByText('Morgan Reed')).toBeVisible();
+    expect(JSON.parse(localStorage.getItem('hirehub_submissions'))).toHaveLength(2);
+  });
+
   it('clears the session and notifies the parent when logging out', async () => {
     const user = userEvent.setup();
     const onLogout = vi.fn();
     sessionStorage.setItem('hirehub_admin_auth', 'true');
-    render(<AdminDashboard onLogout={onLogout} />);
+    renderDashboard(onLogout);
     await user.click(screen.getByRole('button', { name: 'Logout' }));
     expect(sessionStorage.getItem('hirehub_admin_auth')).toBeNull();
     expect(onLogout).toHaveBeenCalledOnce();
